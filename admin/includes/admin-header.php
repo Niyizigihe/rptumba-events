@@ -181,6 +181,9 @@ if (basename($_SERVER['PHP_SELF']) == 'dashboard.php') {
                 <a href="dashboard.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
                     <i class="fas fa-tachometer-alt"></i> Dashboard
                 </a>
+                <a href="../events.php" class="nav-link">
+                    <i class="fas fa-home"></i> Events
+                </a>
                 <a href="manage-events.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'manage-events.php' ? 'active' : ''; ?>">
                     <i class="fas fa-calendar-alt"></i> Manage Events
                 </a>

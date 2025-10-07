@@ -165,107 +165,207 @@
             </div>
         </div>
     </section>
-
-    <!-- Upcoming Events Section -->
-    <section class="events-section">
-        <div class="container">
-            <div class="section-header">
-                <h2>Featured Events</h2>
-                <p>Don't miss these exciting upcoming events</p>
+    <!-- Upcoming & Ongoing Events Section -->
+<section class="events-section">
+    <div class="container">
+        <div class="section-header">
+            <h2>Current & Upcoming Events</h2>
+            <p>Don't miss these exciting events happening now and coming soon</p>
+        </div>
+        
+        <?php
+        // Get both ongoing and upcoming events (limit to 3)
+        $current_events = getCurrentAndUpcomingEvents(3);
+        
+        if(empty($current_events)): ?>
+            <div class="no-events">
+                <i class="fas fa-calendar-times"></i>
+                <h3>No Current Events</h3>
+                <p>Check back later for new events!</p>
+                <?php if(isLoggedIn() && (isAdmin() || isStaff())): ?>
+                    <a href="admin/add-event.php" class="btn btn-primary">Create First Event</a>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <div class="events-tabs">
+                <button class="tab-button active" data-tab="all">All Events</button>
+                <button class="tab-button" data-tab="ongoing">Ongoing</button>
+                <button class="tab-button" data-tab="upcoming">Upcoming</button>
             </div>
             
-            <?php
-            $featured_events = getEvents(6);
-            if(empty($featured_events)): ?>
-                <div class="no-events">
-                    <i class="fas fa-calendar-times"></i>
-                    <h3>No Upcoming Events</h3>
-                    <p>Check back later for new events!</p>
-                    <?php if(isLoggedIn() && (isAdmin() || isStaff())): ?>
-                        <a href="admin/add-event.php" class="btn btn-primary">Create First Event</a>
-                    <?php endif; ?>
-                </div>
-            <?php else: ?>
-                <div class="events-grid featured-events">
-                    <?php foreach($featured_events as $event): 
-                        $date = date('M j, Y', strtotime($event['event_date']));
-                        $time = date('g:i A', strtotime($event['event_time']));
-                        $days_left = floor((strtotime($event['event_date']) - time()) / (60 * 60 * 24));
-                    ?>
-                    <div class="event-card featured">
-                        <div class="event-badge">
-                            <span class="badge <?php echo $event['category']; ?>">
-                                <?php echo ucfirst($event['category']); ?>
+            <div class="events-grid featured-events">
+                <?php foreach($current_events as $event): 
+                    $date = date('M j, Y', strtotime($event['event_date']));
+                    $time = date('g:i A', strtotime($event['event_time']));
+                    $days_left = floor((strtotime($event['event_date']) - time()) / (60 * 60 * 24));
+                    
+                    // Determine event status and calculate end time
+                    $event_datetime = strtotime($event['event_date'] . ' ' . $event['event_time']);
+                    $is_ongoing = false;
+                    
+                    if ($event['duration'] && $event['duration_unit']) {
+                        // Calculate end time based on duration and unit
+                        $end_time = $event_datetime;
+                        switch($event['duration_unit']) {
+                            case 'minutes': $end_time += $event['duration'] * 60; break;
+                            case 'hours': $end_time += $event['duration'] * 3600; break;
+                            case 'days': $end_time += $event['duration'] * 86400; break;
+                            case 'weeks': $end_time += $event['duration'] * 604800; break;
+                            case 'months': $end_time += $event['duration'] * 2592000; break;
+                        }
+                        $is_ongoing = (time() >= $event_datetime && time() <= $end_time);
+                    } else {
+                        // If no duration specified, consider event ongoing only on the day it starts
+                        $is_ongoing = (date('Y-m-d') == $event['event_date'] && time() >= $event_datetime);
+                    }
+                    
+                    $status_class = $is_ongoing ? 'ongoing' : 'upcoming';
+                    $status_text = $is_ongoing ? 'Ongoing' : 'Upcoming';
+                ?>
+                <div class="event-card featured <?php echo $status_class; ?>" data-status="<?php echo $is_ongoing ? 'ongoing' : 'upcoming'; ?>">
+                    <div class="event-badge">
+                        <span class="badge <?php echo $event['category']; ?>">
+                            <i class="fas 
+                                <?php 
+                                switch($event['category']) {
+                                    case 'academic': echo 'fa-graduation-cap'; break;
+                                    case 'sports': echo 'fa-running'; break;
+                                    case 'cultural': echo 'fa-music'; break;
+                                    case 'workshop': echo 'fa-laptop-code'; break;
+                                    default: echo 'fa-calendar';
+                                }
+                                ?>
+                            "></i>
+                            <?php echo ucfirst($event['category']); ?>
+                        </span>
+                        <span class="badge status-<?php echo $status_class; ?>">
+                            <i class="fas <?php echo $is_ongoing ? 'fa-play-circle' : 'fa-clock'; ?>"></i>
+                            <?php echo $status_text; ?>
+                        </span>
+                        <?php if(!$is_ongoing && $days_left <= 3): ?>
+                            <span class="badge urgent">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Soon
                             </span>
-                            <?php if($days_left <= 7): ?>
-                                <span class="badge urgent">Soon</span>
-                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                    <div class="event-image">
+                        <img src="<?php echo $event['image_path']; ?>" alt="<?php echo $event['title']; ?>">
+                        <div class="event-overlay">
+                            <a href="event-details.php?id=<?php echo $event['id']; ?>" class="btn btn-view">
+                                <i class="fas fa-eye"></i> View Details
+                            </a>
                         </div>
-                        <div class="event-image">
-                            <img src="<?php echo $event['image_path']; ?>" alt="<?php echo $event['title']; ?>">
-                            <div class="event-overlay">
-                                <a href="event-details.php?id=<?php echo $event['id']; ?>" class="btn btn-view">
-                                    <i class="fas fa-eye"></i> View Details
-                                </a>
+                    </div>
+                    <div class="event-content">
+                        <h3 class="event-title"><?php echo htmlspecialchars($event['title']); ?></h3>
+                        <p class="event-description"><?php echo substr($event['description'], 0, 80); ?>...</p>
+                        
+                        <div class="event-meta">
+                            <div class="meta-item">
+                                <i class="fas fa-calendar"></i>
+                                <span><?php echo $date; ?></span>
+                            </div>
+                            <div class="meta-item">
+                                <i class="fas fa-clock"></i>
+                                <span><?php echo $time; ?></span>
+                                <?php if($event['duration'] && $event['duration_unit']): ?>
+                                    <span class="duration">• <?php echo $event['duration'] . ' ' . $event['duration_unit']; ?></span>
+                                <?php endif; ?>
+                                <?php if($is_ongoing): ?>
+                                    <span class="live-indicator">
+                                        <i class="fas fa-circle"></i> Live
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="meta-item">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span><?php echo htmlspecialchars($event['venue']); ?></span>
                             </div>
                         </div>
-                        <div class="event-content">
-                            <h3 class="event-title"><?php echo htmlspecialchars($event['title']); ?></h3>
-                            <p class="event-description"><?php echo substr($event['description'], 0, 80); ?>...</p>
-                            
-                            <div class="event-meta">
-                                <div class="meta-item">
-                                    <i class="fas fa-calendar"></i>
-                                    <span><?php echo $date; ?></span>
-                                </div>
-                                <div class="meta-item">
-                                    <i class="fas fa-clock"></i>
-                                    <span><?php echo $time; ?></span>
-                                </div>
-                                <div class="meta-item">
-                                    <i class="fas fa-map-marker-alt"></i>
-                                    <span><?php echo htmlspecialchars($event['venue']); ?></span>
-                                </div>
+                        
+                        <div class="event-footer">
+                            <div class="event-participants">
+                                <i class="fas fa-users"></i>
+                                <span><?php echo $event['registered_count']; ?> registered</span>
+                                <?php if($event['max_participants']): ?>
+                                    <span class="max-participants">/ <?php echo $event['max_participants']; ?> max</span>
+                                <?php endif; ?>
                             </div>
-                            
-                            <div class="event-footer">
-                                <div class="event-participants">
-                                    <i class="fas fa-users"></i>
-                                    <span><?php echo $event['registered_count']; ?> registered</span>
-                                </div>
-                                <div class="event-actions">
-                                    <?php if(isLoggedIn()): 
-                                        $registration = isRegistered($event['id'], $_SESSION['user_id']);
-                                        if($registration): ?>
-                                            <button class="btn btn-success btn-sm" disabled>
-                                                <i class="fas fa-check"></i> Registered
-                                            </button>
-                                        <?php else: ?>
-                                            <form action="register-event.php" method="POST" class="inline-form">
-                                                <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
-                                                <button type="submit" name="action" value="register" class="btn btn-primary btn-sm">
-                                                    <i class="fas fa-plus"></i> Join
-                                                </button>
-                                            </form>
-                                        <?php endif; ?>
+                            <br>
+                            <div class="event-actions">
+                                <?php if(isLoggedIn()): 
+                                    $registration = isRegistered($event['id'], $_SESSION['user_id']);
+                                    if($registration): ?>
+                                        <button class="btn btn-success btn-sm" disabled>
+                                            <i class="fas fa-check"></i> Registered
+                                        </button>
                                     <?php else: ?>
-                                        <a href="login.php" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-sign-in-alt"></i> Login to Join
-                                        </a>
+                                        <form action="register-event.php" method="POST" class="inline-form">
+                                            <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
+                                            <button type="submit" name="action" value="register" class="btn btn-primary btn-sm">
+                                                <i class="fas fa-plus"></i> Join
+                                            </button>
+                                        </form>
                                     <?php endif; ?>
-                                </div>
+                                <?php else: ?>
+                                    <a href="login.php?redirect=event-details.php?id=<?php echo $event['id']; ?>" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-sign-in-alt"></i> Login to Join
+                                    </a>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
-                    <?php endforeach; ?>
                 </div>
-                
-                <div class="section-cta">
-                    <a href="events.php" class="btn btn-outline btn-large">
-                        <i class="fas fa-calendar-week"></i> View All Events
+                <?php endforeach; ?>
+            </div>
+            
+            <div class="section-cta">
+                <a href="events.php" class="btn btn-outline btn-large">
+                    <i class="fas fa-calendar-week"></i> View All Events
+                </a>
+                <?php if(isLoggedIn() && (isAdmin() || isStaff())): ?>
+                    <a href="admin/add-event.php" class="btn btn-primary btn-large">
+                        <i class="fas fa-plus"></i> Create New Event
                     </a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+    <!-- Quick Stats Section -->
+    <section class="stats-section">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-calendar-day"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 class="stat-number" id="ongoing-count">0</h3>
+                        <p class="stat-label">Events Happening Now</p>
+                    </div>
                 </div>
-            <?php endif; ?>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 class="stat-number" id="upcoming-count">0</h3>
+                        <p class="stat-label">Upcoming Events</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 class="stat-number" id="total-participants">0</h3>
+                        <p class="stat-label">Total Participants</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -342,56 +442,71 @@
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="main-footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <div class="footer-logo">
-                        <i class="fas fa-graduation-cap"></i>
-                        <span>RP Tumba Events</span>
-                    </div>
-                    <p>Connecting students with amazing campus experiences through seamless event management.</p>
-                    <div class="social-links">
-                        <a href="#" class="social-link"><i class="fab fa-facebook"></i></a>
-                        <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
-                        <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
-                        <a href="#" class="social-link"><i class="fab fa-linkedin"></i></a>
-                    </div>
-                </div>
-                <div class="footer-section">
-                    <h4>Quick Links</h4>
-                    <ul>
-                        <li><a href="index.php">Home</a></li>
-                        <li><a href="events.php">Events</a></li>
-                        <li><a href="about.php">About</a></li>
-                        <li><a href="contact.php">Contact</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h4>Categories</h4>
-                    <ul>
-                        <li><a href="events.php?category=academic">Academic</a></li>
-                        <li><a href="events.php?category=sports">Sports</a></li>
-                        <li><a href="events.php?category=cultural">Cultural</a></li>
-                        <li><a href="events.php?category=workshop">Workshops</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h4>Contact Info</h4>
-                    <div class="contact-info">
-                        <p><i class="fas fa-map-marker-alt"></i> RP Tumba College, Campus Road</p>
-                        <p><i class="fas fa-envelope"></i> events@rptumba.edu</p>
-                        <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
-                    </div>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2024 RP Tumba College. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
+    <?php include 'includes/footer.php'; ?>
 
     <script src="assets/js/script.js"></script>
+    <script>
+    // Tab functionality for events
+    document.addEventListener('DOMContentLoaded', function() {
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const eventCards = document.querySelectorAll('.event-card');
+        
+        // Count events for stats
+        let ongoingCount = 0;
+        let upcomingCount = 0;
+        let totalParticipants = 0;
+        
+        eventCards.forEach(card => {
+            const status = card.getAttribute('data-status');
+            const participantText = card.querySelector('.event-participants span').textContent;
+            const participantCount = parseInt(participantText) || 0;
+            
+            if (status === 'ongoing') {
+                ongoingCount++;
+            } else {
+                upcomingCount++;
+            }
+            
+            totalParticipants += participantCount;
+        });
+        
+        // Update stats
+        document.getElementById('ongoing-count').textContent = ongoingCount;
+        document.getElementById('upcoming-count').textContent = upcomingCount;
+        document.getElementById('total-participants').textContent = totalParticipants.toLocaleString();
+        
+        // Tab switching
+        tabButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const tab = this.getAttribute('data-tab');
+                
+                // Update active tab
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Show/hide events based on tab
+                let visibleCount = 0;
+                eventCards.forEach(card => {
+                    if (tab === 'all') {
+                        if (visibleCount < 3) {
+                            card.style.display = 'block';
+                            visibleCount++;
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    } else {
+                        const cardStatus = card.getAttribute('data-status');
+                        if (cardStatus === tab && visibleCount < 3) {
+                            card.style.display = 'block';
+                            visibleCount++;
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        });
+    });
+</script>
 </body>
 </html>

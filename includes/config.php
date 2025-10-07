@@ -15,5 +15,7 @@ try {
 }
 
 // Base URL configuration
-define('BASE_URL', 'http://localhost/rptumba-events');
+define('BASE_URL', __DIR__);
+define('ROOT_PATH', dirname(__DIR__));
+define('INCLUDES_PATH', ROOT_PATH . '/includes');
 ?>

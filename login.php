@@ -23,6 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $_SESSION['message'] = "Welcome back, " . $user['name'] . "!";
         $_SESSION['message_type'] = 'success';
+        if(isset($_GET['redirect']) && !empty($_GET['redirect'])) header("Location: ".$_GET['redirect']);
+        else
         header("Location: index.php");
         exit();
     } else {

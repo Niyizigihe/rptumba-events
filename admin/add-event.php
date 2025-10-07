@@ -13,7 +13,8 @@ if (isset($_GET['edit'])) {
     if (!$event || ($event['created_by'] != $_SESSION['user_id'] && !isAdmin())) {
         $_SESSION['message'] = "Event not found or access denied!";
         $_SESSION['message_type'] = 'error';
-        header("Location: manage-events.php");
+        // header("Location: manage-events.php");
+        echo "<script>window.location.href='manage-events.php';</script>";
         exit();
     }
 }
@@ -28,12 +29,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category = $_POST['category'];
     $max_participants = $_POST['max_participants'] ?: null;
     
+    // New duration fields
+    $duration = $_POST['duration'] ?: null;
+    $duration_unit = $_POST['duration_unit'] ?: null;
+    
     // Validation
     if (empty($title) || empty($description) || empty($event_date) || empty($event_time) || empty($venue)) {
         $error = "Please fill in all required fields!";
     } else {
         // Handle image upload
-        $image_path = $event['image_path'] ?? 'assets/images/event-placeholder.jpg'; // Keep existing image if editing
+        $image_path = $event['image_path'] ?? 'assets/images/event-placeholder.jpg';
         
         if (isset($_FILES['event_image']) && $_FILES['event_image']['error'] === UPLOAD_ERR_OK) {
             $upload_result = handleImageUpload($_FILES['event_image']);
@@ -54,20 +59,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!isset($error)) {
             if ($edit_mode) {
                 // Update existing event
-                $stmt = $pdo->prepare("UPDATE events SET title=?, description=?, event_date=?, event_time=?, venue=?, organizer=?, category=?, max_participants=?, image_path=? WHERE id=?");
-                $success = $stmt->execute([$title, $description, $event_date, $event_time, $venue, $organizer, $category, $max_participants, $image_path, $event_id]);
+                $stmt = $pdo->prepare("UPDATE events SET title=?, description=?, event_date=?, event_time=?, venue=?, organizer=?, category=?, max_participants=?, image_path=?, duration=?, duration_unit=? WHERE id=?");
+                $success = $stmt->execute([$title, $description, $event_date, $event_time, $venue, $organizer, $category, $max_participants, $image_path, $duration, $duration_unit, $event_id]);
                 $message = "Event updated successfully!";
             } else {
                 // Insert new event
-                $stmt = $pdo->prepare("INSERT INTO events (title, description, event_date, event_time, venue, organizer, category, max_participants, image_path, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $success = $stmt->execute([$title, $description, $event_date, $event_time, $venue, $organizer, $category, $max_participants, $image_path, $_SESSION['user_id']]);
+                $stmt = $pdo->prepare("INSERT INTO events (title, description, event_date, event_time, venue, organizer, category, max_participants, image_path, duration, duration_unit, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $success = $stmt->execute([$title, $description, $event_date, $event_time, $venue, $organizer, $category, $max_participants, $image_path, $duration, $duration_unit, $_SESSION['user_id']]);
                 $message = "Event created successfully!";
             }
             
             if ($success) {
                 $_SESSION['message'] = $message;
                 $_SESSION['message_type'] = 'success';
-                header("Location: manage-events.php");
+                // header("Location: manage-events.php");
+                echo "<script>window.location.href='manage-events.php';</script>";
                 exit();
             } else {
                 $error = "Failed to save event! Please try again.";
@@ -129,8 +135,8 @@ function handleImageUpload($file) {
 
     <form method="POST" class="admin-form" enctype="multipart/form-data">
         <!-- Image Upload Section -->
-        <div class="form-group">
-            <label>Event Image</label>
+        <div class="form-section">
+            <h3>Event Image</h3>
             <div class="image-upload-container">
                 <div class="image-preview">
                     <?php if ($edit_mode && isset($event['image_path']) && $event['image_path'] !== 'assets/images/event-placeholder.jpg'): ?>
@@ -154,68 +160,209 @@ function handleImageUpload($file) {
             </div>
         </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label>Event Title *</label>
-                <input type="text" name="title" value="<?php echo htmlspecialchars($event['title'] ?? ''); ?>" required>
+        <!-- Basic Information -->
+        <div class="form-section">
+            <h3>Basic Information</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Event Title *</label>
+                    <input type="text" name="title" value="<?php echo htmlspecialchars($event['title'] ?? ''); ?>" required placeholder="Enter event title">
+                </div>
+                <div class="form-group">
+                    <label>Category *</label>
+                    <select name="category" required>
+                        <option value="">Select Category</option>
+                        <option value="academic" <?php echo ($event['category'] ?? '') === 'academic' ? 'selected' : ''; ?>>Academic</option>
+                        <option value="sports" <?php echo ($event['category'] ?? '') === 'sports' ? 'selected' : ''; ?>>Sports</option>
+                        <option value="cultural" <?php echo ($event['category'] ?? '') === 'cultural' ? 'selected' : ''; ?>>Cultural</option>
+                        <option value="workshop" <?php echo ($event['category'] ?? '') === 'workshop' ? 'selected' : ''; ?>>Workshop</option>
+                        <option value="other" <?php echo ($event['category'] ?? '') === 'other' ? 'selected' : ''; ?>>Other</option>
+                    </select>
+                </div>
             </div>
+
             <div class="form-group">
-                <label>Category *</label>
-                <select name="category" required>
-                    <option value="academic" <?php echo ($event['category'] ?? '') === 'academic' ? 'selected' : ''; ?>>Academic</option>
-                    <option value="sports" <?php echo ($event['category'] ?? '') === 'sports' ? 'selected' : ''; ?>>Sports</option>
-                    <option value="cultural" <?php echo ($event['category'] ?? '') === 'cultural' ? 'selected' : ''; ?>>Cultural</option>
-                    <option value="workshop" <?php echo ($event['category'] ?? '') === 'workshop' ? 'selected' : ''; ?>>Workshop</option>
-                    <option value="other" <?php echo ($event['category'] ?? '') === 'other' ? 'selected' : ''; ?>>Other</option>
-                </select>
+                <label>Description *</label>
+                <textarea name="description" rows="5" required placeholder="Describe your event in detail..."><?php echo htmlspecialchars($event['description'] ?? ''); ?></textarea>
             </div>
         </div>
 
-        <div class="form-group">
-            <label>Description *</label>
-            <textarea name="description" rows="5" required><?php echo htmlspecialchars($event['description'] ?? ''); ?></textarea>
+        <!-- Date & Time -->
+        <div class="form-section">
+            <h3>Date & Time</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Event Date *</label>
+                    <input type="date" name="event_date" value="<?php echo $event['event_date'] ?? ''; ?>" required min="<?php echo date('Y-m-d'); ?>">
+                </div>
+                <div class="form-group">
+                    <label>Event Time *</label>
+                    <input type="time" name="event_time" value="<?php echo $event['event_time'] ?? ''; ?>" required>
+                </div>
+            </div>
+
+            <!-- Duration Fields -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Duration (Optional)</label>
+                    <div class="duration-fields">
+                        <input type="number" name="duration" value="<?php echo $event['duration'] ?? ''; ?>" min="1" placeholder="Duration" class="duration-input">
+                        <select name="duration_unit" class="duration-unit">
+                            <option value="">Select Unit</option>
+                            <option value="minutes" <?php echo ($event['duration_unit'] ?? '') === 'minutes' ? 'selected' : ''; ?>>Minutes</option>
+                            <option value="hours" <?php echo ($event['duration_unit'] ?? '') === 'hours' ? 'selected' : ''; ?>>Hours</option>
+                            <option value="days" <?php echo ($event['duration_unit'] ?? '') === 'days' ? 'selected' : ''; ?>>Days</option>
+                            <option value="weeks" <?php echo ($event['duration_unit'] ?? '') === 'weeks' ? 'selected' : ''; ?>>Weeks</option>
+                            <option value="months" <?php echo ($event['duration_unit'] ?? '') === 'months' ? 'selected' : ''; ?>>Months</option>
+                        </select>
+                    </div>
+                    <small class="field-help">Leave empty for single-day events</small>
+                </div>
+                <div class="form-group">
+                    <label>Maximum Participants (Optional)</label>
+                    <input type="number" name="max_participants" value="<?php echo $event['max_participants'] ?? ''; ?>" min="1" placeholder="Leave empty for unlimited">
+                </div>
+            </div>
         </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label>Event Date *</label>
-                <input type="date" name="event_date" value="<?php echo $event['event_date'] ?? ''; ?>" required>
-            </div>
-            <div class="form-group">
-                <label>Event Time *</label>
-                <input type="time" name="event_time" value="<?php echo $event['event_time'] ?? ''; ?>" required>
-            </div>
-        </div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <label>Venue *</label>
-                <input type="text" name="venue" value="<?php echo htmlspecialchars($event['venue'] ?? ''); ?>" required>
-            </div>
-            <div class="form-group">
-                <label>Organizer</label>
-                <input type="text" name="organizer" value="<?php echo htmlspecialchars($event['organizer'] ?? ''); ?>">
+        <!-- Location & Organizer -->
+        <div class="form-section">
+            <h3>Location & Organizer</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Venue *</label>
+                    <input type="text" name="venue" value="<?php echo htmlspecialchars($event['venue'] ?? ''); ?>" required placeholder="Event location or venue">
+                </div>
+                <div class="form-group">
+                    <label>Organizer</label>
+                    <input type="text" name="organizer" value="<?php echo htmlspecialchars($event['organizer'] ?? $_SESSION['name'] ?? ''); ?>" placeholder="Event organizer name">
+                </div>
             </div>
         </div>
 
-        <div class="form-group">
-            <label>Maximum Participants (optional)</label>
-            <input type="number" name="max_participants" value="<?php echo $event['max_participants'] ?? ''; ?>" min="1">
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-large">
+                <i class="fas fa-<?php echo $edit_mode ? 'save' : 'plus'; ?>"></i>
+                <?php echo $edit_mode ? 'Update Event' : 'Create Event'; ?>
+            </button>
+            <a href="manage-events.php" class="btn btn-outline">Cancel</a>
         </div>
-
-        <button type="submit" class="btn btn-primary btn-large">
-            <?php echo $edit_mode ? 'Update Event' : 'Create Event'; ?>
-        </button>
     </form>
 </div>
 
 <style>
+.admin-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+}
+
+.admin-header h1 {
+    margin: 0;
+    color: #2c3e50;
+}
+
+.form-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.form-section h3 {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #3498db;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-section h3::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: #3498db;
+    border-radius: 2px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 120px;
+}
+
+/* Duration Fields */
+.duration-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.duration-input,
+.duration-unit {
+    width: 100%;
+}
+
+.field-help {
+    color: #7f8c8d;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+
+/* Image Upload */
 .image-upload-container {
     border: 2px dashed #ddd;
     border-radius: 10px;
     padding: 2rem;
     text-align: center;
     background: #f8f9fa;
+    transition: all 0.3s ease;
 }
 
 .image-preview {
@@ -227,6 +374,7 @@ function handleImageUpload($file) {
     max-height: 200px;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    object-fit: cover;
 }
 
 .no-image {
@@ -235,6 +383,7 @@ function handleImageUpload($file) {
     border: 2px dashed #dee2e6;
     border-radius: 8px;
     background: white;
+    transition: all 0.3s ease;
 }
 
 .no-image i {
@@ -257,26 +406,71 @@ function handleImageUpload($file) {
 .upload-info {
     color: #6c757d;
     font-size: 0.875rem;
+    text-align: center;
 }
 
 .image-upload-container:hover {
     border-color: #3498db;
     background: #f0f8ff;
 }
+
+.image-upload-container.dragover {
+    border-color: #3498db;
+    background: #e3f2fd;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 2rem;
+    border-top: 1px solid #eee;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .admin-container {
+        padding: 1rem;
+    }
+    
+    .admin-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .duration-fields {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .image-preview img {
+        max-width: 100%;
+    }
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('event_image');
-    const imagePreview = document.getElementById('imagePreview');
+    let imagePreview = document.getElementById('imagePreview');
+    const uploadContainer = document.querySelector('.image-upload-container');
     
+    // Image preview functionality
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
             
             reader.onload = function(e) {
-                // Replace no-image div with actual image
                 if (imagePreview.classList.contains('no-image')) {
                     const img = document.createElement('img');
                     img.src = e.target.result;
@@ -285,6 +479,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     img.style.maxHeight = '200px';
                     img.style.borderRadius = '8px';
                     img.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                    img.style.objectFit = 'cover';
                     
                     imagePreview.parentNode.replaceChild(img, imagePreview);
                     imagePreview = img;
@@ -297,35 +492,40 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Add drag and drop functionality
-    const uploadContainer = document.querySelector('.image-upload-container');
-    
+    // Drag and drop functionality
     uploadContainer.addEventListener('dragover', function(e) {
         e.preventDefault();
-        this.style.borderColor = '#3498db';
-        this.style.background = '#e3f2fd';
+        this.classList.add('dragover');
     });
     
     uploadContainer.addEventListener('dragleave', function(e) {
         e.preventDefault();
-        this.style.borderColor = '#ddd';
-        this.style.background = '#f8f9fa';
+        this.classList.remove('dragover');
     });
     
     uploadContainer.addEventListener('drop', function(e) {
         e.preventDefault();
-        this.style.borderColor = '#ddd';
-        this.style.background = '#f8f9fa';
+        this.classList.remove('dragover');
         
         const files = e.dataTransfer.files;
         if (files.length > 0) {
             fileInput.files = files;
-            
-            // Trigger change event
             const event = new Event('change');
             fileInput.dispatchEvent(event);
         }
     });
+    
+    // Set minimum date to today
+    const dateInput = document.querySelector('input[type="date"]');
+    if (dateInput && !dateInput.value) {
+        dateInput.min = new Date().toISOString().split('T')[0];
+    }
+    
+    // Auto-fill organizer with current user's name if empty
+    const organizerInput = document.querySelector('input[name="organizer"]');
+    if (organizerInput && !organizerInput.value) {
+        organizerInput.value = '<?php echo $_SESSION['name'] ?? ''; ?>';
+    }
 });
 </script>
 
