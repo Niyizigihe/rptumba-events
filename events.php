@@ -6,71 +6,77 @@ $category = $_GET['category'] ?? 'all';
 $search = $_GET['search'] ?? '';
 $status = $_GET['status'] ?? 'all';
 
-$sql = "SELECT e.*, 
-               COUNT(CASE WHEN er.status = 'registered' THEN 1 END) as registered_count,
-               COUNT(CASE WHEN er.status = 'interested' THEN 1 END) as interested_count,
-               e.organizer as organizer_name
-        FROM events e 
-        LEFT JOIN event_registrations er ON e.id = er.event_id 
-        LEFT JOIN users u ON e.created_by = u.id 
-        WHERE e.event_date >= CURDATE()";
+// Get all events including completed for filtering
+$all_events = getEvents(null, 'all', true);
+$filtered_events = [];
 
-$params = [];
-
-if ($category !== 'all') {
-    $sql .= " AND e.category = ?";
-    $params[] = $category;
+// Apply filters
+foreach($all_events as $event) {
+    // Category filter
+    if ($category !== 'all' && $event['category'] !== $category) {
+        continue;
+    }
+    
+    // Search filter
+    if (!empty($search)) {
+        $searchTerm = strtolower($search);
+        $title = strtolower($event['title']);
+        $description = strtolower($event['description']);
+        $venue = strtolower($event['venue']);
+        
+        if (strpos($title, $searchTerm) === false && 
+            strpos($description, $searchTerm) === false && 
+            strpos($venue, $searchTerm) === false) {
+            continue;
+        }
+    }
+    
+    // Status filter
+    if ($status !== 'all') {
+        $event_status = $event['calculated_status'];
+        if ($status === 'ongoing' && $event_status !== 'ongoing') {
+            continue;
+        }
+        if ($status === 'upcoming' && $event_status !== 'upcoming') {
+            continue;
+        }
+        if ($status === 'completed' && $event_status !== 'completed') {
+            continue;
+        }
+        if ($status === 'cancelled' && $event_status !== 'cancelled') {
+            continue;
+        }
+    }
+    
+    // For "all" status, only show non-completed events by default
+    if ($status === 'all' && $event['calculated_status'] === 'completed') {
+        continue;
+    }
+    
+    $filtered_events[] = $event;
 }
 
-if (!empty($search)) {
-    $sql .= " AND (e.title LIKE ? OR e.description LIKE ? OR e.venue LIKE ?)";
-    $searchTerm = "%$search%";
-    $params[] = $searchTerm;
-    $params[] = $searchTerm;
-    $params[] = $searchTerm;
+// Use filtered events - don't run another query
+$events = $filtered_events;
+
+// Calculate dynamic status for each event (if not already done)
+foreach($events as &$event) {
+    if (!isset($event['calculated_status'])) {
+        $event['calculated_status'] = calculateEventStatus($event);
+        $event['is_live'] = isEventLive($event);
+        $event['is_soon'] = isEventSoon($event);
+        $event['days_until'] = getDaysUntilEvent($event);
+        $event['stats'] = getEventStats($event);
+        
+        // Calculate end time if duration is set
+        if ($event['duration'] && $event['duration_unit']) {
+            $event['end_time'] = calculateEventEndTime($event['event_date'], $event['event_time'], $event['duration'], $event['duration_unit']);
+        }
+    }
 }
+unset($event); // Break reference
 
-// Fixed status filter for ongoing/upcoming
-if ($status === 'ongoing') {
-    $sql .= " AND (e.event_date = CURDATE() OR 
-                  (e.duration IS NOT NULL AND 
-                   TIMESTAMP(e.event_date, e.event_time) + INTERVAL 
-                   CASE e.duration_unit
-                       WHEN 'minutes' THEN e.duration
-                       WHEN 'hours' THEN e.duration * 60
-                       WHEN 'days' THEN e.duration * 1440
-                       WHEN 'weeks' THEN e.duration * 10080
-                       WHEN 'months' THEN e.duration * 43800
-                       ELSE 0
-                   END MINUTE >= NOW()))";
-} elseif ($status === 'upcoming') {
-    $sql .= " AND (e.event_date > CURDATE() OR 
-                  (e.event_date = CURDATE() AND e.event_time > TIME(NOW())))";
-}
-
-$sql .= " GROUP BY e.id ORDER BY 
-          CASE 
-            WHEN (e.event_date = CURDATE() AND 
-                 (e.duration IS NULL OR 
-                  TIME(e.event_time) <= TIME(NOW() + INTERVAL 
-                    CASE e.duration_unit
-                        WHEN 'minutes' THEN e.duration
-                        WHEN 'hours' THEN e.duration * 60
-                        WHEN 'days' THEN e.duration * 1440
-                        WHEN 'weeks' THEN e.duration * 10080
-                        WHEN 'months' THEN e.duration * 43800
-                        ELSE 0
-                    END MINUTE))) THEN 0 
-            ELSE 1 
-          END,
-          e.event_date ASC, 
-          e.event_time ASC";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$events = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
-
 <?php include 'includes/header.php'; ?>
 
 <div class="container">
@@ -135,9 +141,11 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="filter-group">
                     <label for="status">Event Status</label>
                     <select id="status" name="status">
-                        <option value="all" <?php echo $status === 'all' ? 'selected' : ''; ?>>All Events</option>
+                        <option value="all" <?php echo $status === 'all' ? 'selected' : ''; ?>>Active Events</option>
                         <option value="ongoing" <?php echo $status === 'ongoing' ? 'selected' : ''; ?>>Ongoing Now</option>
                         <option value="upcoming" <?php echo $status === 'upcoming' ? 'selected' : ''; ?>>Upcoming</option>
+                        <option value="completed" <?php echo $status === 'completed' ? 'selected' : ''; ?>>Past Events</option>
+                        <option value="cancelled" <?php echo $status === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
                     </select>
                 </div>
                 
@@ -152,6 +160,24 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </form>
     </div>
+
+    
+
+    <!-- Add this temporarily for debugging -->
+<!-- <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+    <strong>Debug Info:</strong><br>
+    <?php foreach($events as $event): ?>
+        Event: <?php echo $event['title']; ?><br>
+        Date: <?php echo $event['event_date']; ?> <?php echo $event['event_time']; ?><br>
+        Duration: <?php echo $event['duration'] ? $event['duration'] . ' ' . $event['duration_unit'] : 'None'; ?><br>
+        Calculated Status: <?php echo $event['calculated_status']; ?><br>
+        <?php if($event['end_time']): ?>
+            End Time: <?php echo date('Y-m-d H:i:s', $event['end_time']); ?><br>
+        <?php endif; ?>
+        Current Time: <?php echo date('Y-m-d H:i:s'); ?><br>
+        <hr>
+    <?php endforeach; ?>
+</div> -->
 
     <!-- Results Header -->
     <div class="results-header">
@@ -197,28 +223,12 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php foreach($events as $event): 
                 $date = date('M j, Y', strtotime($event['event_date']));
                 $time = date('g:i A', strtotime($event['event_time']));
-                $days_left = floor((strtotime($event['event_date']) - time()) / (60 * 60 * 24));
                 
-                // Determine event status
-                $event_datetime = strtotime($event['event_date'] . ' ' . $event['event_time']);
-                $is_ongoing = false;
-                
-                if ($event['duration'] && $event['duration_unit']) {
-                    $end_time = $event_datetime;
-                    switch($event['duration_unit']) {
-                        case 'minutes': $end_time += $event['duration'] * 60; break;
-                        case 'hours': $end_time += $event['duration'] * 3600; break;
-                        case 'days': $end_time += $event['duration'] * 86400; break;
-                        case 'weeks': $end_time += $event['duration'] * 604800; break;
-                        case 'months': $end_time += $event['duration'] * 2592000; break;
-                    }
-                    $is_ongoing = (time() >= $event_datetime && time() <= $end_time);
-                } else {
-                    $is_ongoing = (date('Y-m-d') == $event['event_date'] && time() >= $event_datetime);
-                }
-                
-                $status_class = $is_ongoing ? 'ongoing' : 'upcoming';
-                $status_text = $is_ongoing ? 'Ongoing' : 'Upcoming';
+                // Use calculated status from functions
+                $status_class = $event['calculated_status'];
+                $status_text = ucfirst($event['calculated_status']);
+                $is_ongoing = $event['is_live'];
+                $is_soon = $event['is_soon'];
             ?>
             <div class="event-card featured" data-status="<?php echo $status_class; ?>">
                 <div class="event-badge">
@@ -240,10 +250,16 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <i class="fas <?php echo $is_ongoing ? 'fa-play-circle' : 'fa-clock'; ?>"></i>
                         <?php echo $status_text; ?>
                     </span>
-                    <?php if(!$is_ongoing && $days_left <= 3): ?>
+                    <?php if($is_soon): ?>
                         <span class="badge urgent">
                             <i class="fas fa-exclamation-circle"></i>
                             Soon
+                        </span>
+                    <?php endif; ?>
+                    <?php if($is_ongoing): ?>
+                        <span class="badge live">
+                            <i class="fas fa-circle"></i>
+                            Live
                         </span>
                     <?php endif; ?>
                 </div>
@@ -286,12 +302,7 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <i class="fas fa-clock"></i>
                             <span><?php echo $time; ?></span>
                             <?php if($event['duration'] && $event['duration_unit']): ?>
-                                <span class="duration">• <?php echo $event['duration'] . ' ' . $event['duration_unit']; ?></span>
-                            <?php endif; ?>
-                            <?php if($is_ongoing): ?>
-                                <span class="live-indicator">
-                                    <i class="fas fa-circle"></i> Live
-                                </span>
+                                <span class="duration">• <?php echo formatDuration($event['duration'], $event['duration_unit']); ?></span>
                             <?php endif; ?>
                         </div>
                         <div class="meta-item">
@@ -306,19 +317,36 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     <div class="event-footer">
                         <div class="event-engagement">
-                            <div class="engagement-item">
-                                <i class="fas fa-user-check"></i>
-                                <span><?php echo $event['registered_count']; ?> Going</span>
-                            </div>
-                            <div class="engagement-item">
-                                <i class="fas fa-star"></i>
-                                <span><?php echo $event['interested_count']; ?> Interested</span>
-                            </div>
-                            <?php if($event['max_participants']): ?>
+                            <?php if($event['stats']['type'] === 'past'): ?>
+                                <!-- Past Event Stats -->
+                                <div class="engagement-item">
+                                    <i class="fas fa-user-check"></i>
+                                    <span><?php echo $event['stats']['stats']['attended']; ?> Attended</span>
+                                </div>
                                 <div class="engagement-item">
                                     <i class="fas fa-users"></i>
-                                    <span><?php echo $event['max_participants']; ?> Max</span>
+                                    <span><?php echo $event['stats']['stats']['registered']; ?> Registered</span>
                                 </div>
+                                <div class="engagement-item past-event">
+                                    <i class="fas fa-history"></i>
+                                    <span>Past Event</span>
+                                </div>
+                            <?php else: ?>
+                                <!-- Current Event Stats -->
+                                <div class="engagement-item">
+                                    <i class="fas fa-user-check"></i>
+                                    <span><?php echo $event['stats']['stats']['going']; ?> Going</span>
+                                </div>
+                                <div class="engagement-item">
+                                    <i class="fas fa-star"></i>
+                                    <span><?php echo $event['stats']['stats']['interested']; ?> Interested</span>
+                                </div>
+                                <?php if($event['stats']['stats']['max_participants']): ?>
+                                    <div class="engagement-item">
+                                        <i class="fas fa-users"></i>
+                                        <span><?php echo $event['stats']['stats']['max_participants']; ?> Max</span>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                         <div class="event-actions">
@@ -390,6 +418,7 @@ $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <?php include 'includes/footer.php'; ?>
+
 
 <style>
 /* Events Page Specific Styles */

@@ -30,6 +30,7 @@ if (isset($_GET['id'])) {
     }
 }
 
-header("Location: manage-events.php");
+// header("Location: manage-events.php");
+echo "<script>window.location.href='manage-events.php';</script>";
 exit();
 ?>

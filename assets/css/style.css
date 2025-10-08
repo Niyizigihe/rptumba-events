@@ -1402,3 +1402,68 @@ body {
         padding: 1rem;
     }
 }
+
+/* Additional status badge colors */
+.badge.status-completed {
+    background: #95a5a6;
+}
+
+.badge.status-cancelled {
+    background: #7f8c8d;
+}
+
+.badge.live {
+    background: #e74c3c;
+    animation: pulse 1.5s infinite;
+}
+
+.badge.completed {
+    background: #27ae60;
+}
+
+.badge.cancelled {
+    background: #95a5a6;
+}
+
+/* Past Event Styles */
+.past-event {
+    background: #6c757d !important;
+    color: white !important;
+}
+
+.engagement-item.past-event {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+    border-radius: 15px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.stat-number.past-event {
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+/* Completed event card styling */
+.event-card.completed {
+    opacity: 0.8;
+    border: 2px solid #e9ecef;
+}
+
+.event-card.completed .event-badge .status-completed {
+    background: #6c757d;
+}
+
+/* Disable actions for completed events */
+.event-card.completed .event-actions {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.event-card.completed .btn {
+    background: #6c757d !important;
+    border-color: #6c757d !important;
+    cursor: not-allowed;
+}

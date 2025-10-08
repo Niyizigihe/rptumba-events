@@ -21,27 +21,13 @@ $is_registered = isLoggedIn() ? isRegistered($event_id, $_SESSION['user_id']) : 
 
 $date = date('F j, Y', strtotime($event['event_date']));
 $time = date('g:i A', strtotime($event['event_time']));
-$event_datetime = strtotime($event['event_date'] . ' ' . $event['event_time']);
-$days_left = floor((strtotime($event['event_date']) - time()) / (60 * 60 * 24));
 
-// Determine event status
-$is_ongoing = false;
-if ($event['duration'] && $event['duration_unit']) {
-    $end_time = $event_datetime;
-    switch($event['duration_unit']) {
-        case 'minutes': $end_time += $event['duration'] * 60; break;
-        case 'hours': $end_time += $event['duration'] * 3600; break;
-        case 'days': $end_time += $event['duration'] * 86400; break;
-        case 'weeks': $end_time += $event['duration'] * 604800; break;
-        case 'months': $end_time += $event['duration'] * 2592000; break;
-    }
-    $is_ongoing = (time() >= $event_datetime && time() <= $end_time);
-} else {
-    $is_ongoing = (date('Y-m-d') == $event['event_date'] && time() >= $event_datetime);
-}
-
-$status_class = $is_ongoing ? 'ongoing' : 'upcoming';
-$status_text = $is_ongoing ? 'Ongoing Now' : 'Upcoming';
+// Use calculated status from functions
+$status_class = $event['calculated_status'];
+$status_text = ucfirst($event['calculated_status']);
+$is_ongoing = $event['is_live'];
+$is_soon = $event['is_soon'];
+$event_stats = getEventStats($event);
 ?>
 
 <?php include 'includes/header.php'; ?>
@@ -74,10 +60,16 @@ $status_text = $is_ongoing ? 'Ongoing Now' : 'Upcoming';
                     <i class="fas <?php echo $is_ongoing ? 'fa-play-circle' : 'fa-clock'; ?>"></i>
                     <?php echo $status_text; ?>
                 </span>
-                <?php if(!$is_ongoing && $days_left <= 3): ?>
+                <?php if($is_soon): ?>
                     <span class="badge urgent">
                         <i class="fas fa-exclamation-circle"></i>
                         Soon
+                    </span>
+                <?php endif; ?>
+                <?php if($is_ongoing): ?>
+                    <span class="badge live">
+                        <i class="fas fa-circle"></i>
+                        Live
                     </span>
                 <?php endif; ?>
             </div>
@@ -129,7 +121,7 @@ $status_text = $is_ongoing ? 'Ongoing Now' : 'Upcoming';
                             <p><?php echo $date; ?></p>
                             <span class="info-time"><?php echo $time; ?></span>
                             <?php if($event['duration'] && $event['duration_unit']): ?>
-                                <span class="info-duration">• <?php echo $event['duration'] . ' ' . $event['duration_unit']; ?></span>
+                                <span class="info-duration">• <?php echo formatDuration($event['duration'], $event['duration_unit']); ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -150,10 +142,19 @@ $status_text = $is_ongoing ? 'Ongoing Now' : 'Upcoming';
                         </div>
                         <div class="info-content">
                             <h4>Participants</h4>
+                            <?php if($event_stats['type'] === 'past'): ?>
+                            <p><?php echo $event_stats['stats']['attended']; ?> Attended</p>
+                            <p><?php echo $event_stats['stats']['registered']; ?> Registered</p>
+                            <?php if($event['max_participants']): ?>
+                                <span class="max-participants">Max: <?php echo $event['max_participants']; ?></span>
+                            <?php endif; ?>
+                            <?php else: ?>
+                            
                             <p><?php echo $registered_count; ?> Going</p>
                             <p><?php echo $interested_count; ?> Interested</p>
                             <?php if($event['max_participants']): ?>
                                 <span class="max-participants">Max: <?php echo $event['max_participants']; ?></span>
+                            <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -268,21 +269,38 @@ $status_text = $is_ongoing ? 'Ongoing Now' : 'Upcoming';
 
                     <!-- Quick Stats -->
                     <div class="quick-stats">
+                    <?php if($event_stats['type'] === 'past'): ?>
+                        <!-- Past Event Stats -->
                         <div class="stat-item">
-                            <span class="stat-number"><?php echo $registered_count; ?></span>
+                            <span class="stat-number"><?php echo $event_stats['stats']['attended']; ?></span>
+                            <span class="stat-label">Attended</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number"><?php echo $event_stats['stats']['registered']; ?></span>
+                            <span class="stat-label">Registered</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number past-event">Past</span>
+                            <span class="stat-label">Event</span>
+                        </div>
+                    <?php else: ?>
+                        <!-- Current Event Stats -->
+                        <div class="stat-item">
+                            <span class="stat-number"><?php echo $event_stats['stats']['going']; ?></span>
                             <span class="stat-label">Going</span>
                         </div>
                         <div class="stat-item">
-                            <span class="stat-number"><?php echo $interested_count; ?></span>
+                            <span class="stat-number"><?php echo $event_stats['stats']['interested']; ?></span>
                             <span class="stat-label">Interested</span>
                         </div>
-                        <?php if($event['max_participants']): ?>
+                        <?php if($event_stats['stats']['max_participants']): ?>
                         <div class="stat-item">
-                            <span class="stat-number"><?php echo max(0, $event['max_participants'] - $registered_count); ?></span>
+                            <span class="stat-number"><?php echo max(0, $event_stats['stats']['max_participants'] - $event_stats['stats']['going']); ?></span>
                             <span class="stat-label">Spots Left</span>
                         </div>
                         <?php endif; ?>
-                    </div>
+                    <?php endif; ?>
+                </div>
                 </div>
 
                 <!-- Share Event -->
